@@ -1,0 +1,71 @@
+
+```{r}
+library(MatchIt)
+library(dplyr)
+library(ggplot2)
+```
+
+```{r}
+lowDim_dataset <- read.csv("../data/lowDim_dataset.csv")
+Control <- subset(lowDim_dataset, A == 0)
+Treated <- subset(lowDim_dataset,  A == 1)
+model_1 <- lm(Y ~ . - Y,data=lowDim_dataset)
+Effect <- model_1$coeff[2] 
+model_1
+```
+
+
+```{r}
+#alpha = 0 for ridge (l2) regression
+library(glmnet)
+grid = 10^seq(10, -2, length = 100)
+pscores.model <- glm(A ~ . - A - Y,data = lowDim_dataset)
+#pscores.model <- glmnet(y=lowDim_dataset$A,x=lowDim_dataset[3:24],data = lowDim_dataset, alpha = 0)
+summary(pscores.model)
+
+Propensity_scores <- pscores.model
+lowDim_dataset$PScores <- pscores.model$fitted.values
+hist(subset(lowDim_dataset,  A == 1)$PScores,main = "PScores of Response = 1")
+hist(subset(lowDim_dataset,  A == 0)$PScores,main = "PScores of Response = 0")
+```
+
+
+```{r}
+#covariates we are using
+xvars <- names(lowDim_dataset)[3:24]
+library(tableone)
+table1 <- CreateTableOne(vars = xvars,strata = "A",data = lowDim_dataset, test = FALSE)
+table1
+```
+
+
+```{r}
+library(MatchIt)
+match2 <- matchit(pscores.model$formula, method="nearest", radio=1,data=lowDim_dataset)
+plot(match2, type="jitter")
+```
+
+
+```{r}
+match2.data <- match.data(match2)
+table_match2 <- CreateTableOne(vars = xvars,strata = "A",data = match2.data,test = FALSE)
+print(table_match2, smd = TRUE)
+```
+
+
+```{r}
+y_trt <- match2.data$Y[match2.data$A == 1]
+y_con <- match2.data$Y[match2.data$A == 0]
+difference <- y_trt - y_con
+t.test(difference)
+```
+
+
+
+```{r}
+lowDim_dataset <- read.csv("../data/lowDim_dataset.csv")
+ridge_mod <- glmnet(y=lowDim_dataset$A,x=lowDim_dataset[3:24],data = lowDim_dataset, alpha = 0)
+dim(coef(ridge_mod))
+plot(ridge_mod)
+```
+
