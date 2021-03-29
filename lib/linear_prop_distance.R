@@ -7,6 +7,7 @@ logit <- function(p){
   return(output)
 }
 
+# Takes two propensity scores and computes linear propensity distance
 linear_prop_distance <- function(e1, e2){
   logit1 <- logit(e1)
   logit2 <- logit(e2)
