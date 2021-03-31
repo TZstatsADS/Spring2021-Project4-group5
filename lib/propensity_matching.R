@@ -17,7 +17,7 @@ net_discrepancy <- function(S, D){
         if(j != k){
           
           # Check that groups are opposite
-          if(curr_group[j][3] == curr_group[k][3]){
+          if(curr_group[j][3] != curr_group[k][3]){
             # Get discrepancy between points
             idx1 <- curr_group[j][1]
             idx2 <- curr_group[k][1]
@@ -32,7 +32,22 @@ net_discrepancy <- function(S, D){
   
 }
 
-find_closest_comparison <- function(e){
+find_closest_comparison <- function(e, U, D){
+  min_disc <- Inf
+  closest_comp <- NULL
+  curr_idx <- e[1]
+  for(i in 1:dim(D)[1]){
+    if(i != curr_idx){
+      curr_e <- U[i]
+      curr_disc <- D[curr_idx, i]
+      if((curr_e[3] != e[3]) & (curr_disc < min_disc)){
+        min_disc <- curr_disc
+        closest_comp <- curr_e
+      }
+    }
+  }
+  
+  return(closest_comp)
   
 }
 
@@ -63,7 +78,7 @@ propensity_matching <- function(U, S, D){
   }
   
   # Test if putting e in new group will work best
-  e_prime <- find_closest_comparison(e)
+  e_prime <- find_closest_comparison(e, U, D)
   new_group <- c(e,e_prime)
   new_S <- S
   new_S <- append(new_S, new_group)
