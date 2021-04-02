@@ -72,24 +72,26 @@ propensity_matching <- function(U, S, D){
   min_discrepancy <- Inf
   best_S <- NULL
   
-  for(i in length(S)){
-    # Insert e into one of the groups
-    new_s <- S[[i]]
-    new_s.size <- length(new_s)
-    new_s[[new_s.size + 1]] = e
-    new_S <- S
-    new_S[[i]] <- new_s
-    
-    # Recurse on this new matching assignment
-    new_S <- propensity_matching(new_U, new_S, D)
-    net_dis <- net_discrepancy(new_S, D)
-    
-    # Check if this is best so far
-    if (net_dis < min_discrepancy) {
-      min_discrepancy <- net_dis
-      best_S <- new_S
+  if(length(S) > 0){
+    for(i in 1:length(S)){
+      # Insert e into one of the groups
+      new_s <- S[[i]]
+      new_s.size <- length(new_s)
+      new_s[[new_s.size + 1]] = e
+      new_S <- S
+      new_S[[i]] <- new_s
+      
+      # Recurse on this new matching assignment
+      new_S <- propensity_matching(new_U, new_S, D)
+      net_dis <- net_discrepancy(new_S, D)
+      
+      # Check if this is best so far
+      if (net_dis < min_discrepancy) {
+        min_discrepancy <- net_dis
+        best_S <- new_S
+      }
+      
     }
-    
   }
   
   # Test if putting e in new group will work best

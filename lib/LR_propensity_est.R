@@ -19,7 +19,7 @@ lr_propensity <- function(features, model){
     features <- subset(features, select = -c(Y))
   }
   if("A" %in% colnames(features)){
-    features <- subset(features, select = -c(Y))
+    features <- subset(features, select = -c(A))
   }
   
   props <- predict(model, newx = features, type = "response")

@@ -8,9 +8,9 @@
 # U will be a matrix where each row corresponds to an e_i
 
 # Import linear propensity distance function
-source("linear_prop_distance.R")
+source("../lib/linear_prop_distance.R")
 
-get_distance_matrix<- function(U){
+get_distance_matrix <- function(U){
   n <- dim(U)[1]
   
   # Intialize D
