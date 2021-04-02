@@ -10,8 +10,9 @@
 # Import linear propensity distance function
 source("linear_prop_distance.R")
 
-get_distance_matrixn<- function(U){
+get_distance_matrix<- function(U){
   n <- dim(U)[1]
+  
   # Intialize D
   D <- matrix(, nrow = n, ncol = n)
   
