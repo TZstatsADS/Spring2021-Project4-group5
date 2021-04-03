@@ -1,0 +1,147 @@
+---
+title: "ATE Estimation using Full Propensity Matching (implemented from scratch) and Linear Propensity Scoring"
+output: html_notebook
+---
+
+
+```{r}
+if(!require("dplyr")){
+  install.packages("dplyr")
+}
+
+library(dplyr)
+```
+
+
+First, let's load the data and summarize it.
+```{r}
+lowdim_data <- read.csv("../data/lowDim_dataset.csv")
+highdim_data <- read.csv("../data/highDim_dataset.csv")
+
+print(dim(lowdim_data))
+print(dim(highdim_data))
+```
+
+We can see that the high-dimensional data has an order of magnitude more dimensions, and four times the data as compared to the low dimensional data. Let's view a couple rows
+
+```{r}
+head(lowdim_data)
+head(highdim_data)
+```
+
+Interestingly, the low-dimensional data seems somewhat sparse, with lots of zeros in the feature matrix. Let us proceed with our estimation of the average treatment effect for each.
+
+To test our algorithm, let's use a small sample of the datasets
+```{r}
+lowdim_data <- lowdim_data[1:11,]
+highdim_data <- highdim_data[1:11,]
+```
+
+
+
+First, we must train models to estimate the propensity scores:
+**TODO: Add all five methods
+```{r}
+source("../lib/LR_propensity_est.R")
+lowdim_p1_time <- system.time({lowdim_model <- lr_propensity_model(lowdim_data);})
+highdim_p1_time <- system.time({highdim_model <- lr_propensity_model(highdim_data);})
+```
+
+
+Next, we must obtain the propensity score estimates for each dataset:
+```{r}
+lowdim_p1scores_time <- system.time({lowdim_prop_scores <- lr_propensity(lowdim_data, lowdim_model);})
+highdim_p1scores_time <- system.time({highdim_prop_scores <- lr_propensity(highdim_data, highdim_model);})
+
+```
+
+
+Now, we must construct a propensity matrix U with all of the information we'll need later; each row will comprise of (index, propensity score, treatment_indicator)
+```{r}
+lowdim_n <- dim(lowdim_data)[1]
+lowdim_index <- c(1:lowdim_n)
+lowdim_treatment_indicator <- lowdim_data$A == 1
+lowdim_U <- as.matrix(cbind(lowdim_index, lowdim_prop_scores, lowdim_treatment_indicator))
+
+highdim_n <- dim(highdim_data)[1]
+highdim_index <- c(1:highdim_n)
+highdim_treatment_indicator <- highdim_data$A == 1
+highdim_U <- as.matrix(cbind(highdim_index, highdim_prop_scores, highdim_treatment_indicator))
+```
+
+
+In addition, we must construct a matrix with all of the pariwise propensity distances between the points. We will use this for our propensity matching algorithm.
+
+```{r}
+source("../lib/distance_matrix.R")
+lowdim_D_time <- system.time({lowdim_D <- get_distance_matrix(lowdim_U);})
+highdim_D_time <- system.time({highdim_D <- get_distance_matrix(highdim_U);})
+```
+
+
+Now, we obtain the matching assignments via our Full Matching algorithm (details in Piazza post 118).
+
+```{r}
+source("../lib/propensity_fullmatching.R")
+
+lowdim_S_time <- system.time({lowdim_S <- propensity_matching_root(lowdim_U, lowdim_D);})
+highdim_S_time <- system.time({highdim_S <- propensity_matching_root(highdim_U, highdim_D);})
+```
+
+Finally, we use the assignments to estimate ATE for each dataset, and compare them to the real ATEs
+
+```{r}
+lowdim_ATE_real <- 2.0901
+highdim_ATE_real <- -54.8558
+
+source("../lib/fullmatch_ATE_est.R")
+
+lowdim_y <- lowdim_data$Y
+highdim_y <- highdim_data$Y
+
+lowdim_ATE_est <- estimate_ATE(lowdim_S, lowdim_y)
+highdim_ATE_est <- estimate_ATE(highdim_S, highdim_y)
+```
+
+```{r}
+print("Low Dimensional ATE Estimate: ")
+print(lowdim_ATE_est[1])
+print("Actual Low Dimensional ATE: ")
+print(lowdim_ATE_real[1])
+cat("\n")
+print("High Dimensional ATE Estimate: ")
+print(highdim_ATE_est[1])
+print("Actual High Dimensional ATE: ")
+print(highdim_ATE_real[1])
+```
+
+And below are the times taken for each part of the A1 + D3 + P1 algorithm for ATE estimation
+
+```{r}
+cat("Low Dimensional Dataset:")
+cat("Time to train LR model=", lowdim_p1_time[3], "s \n")
+cat("Time to estimate propensity scores=", lowdim_p1scores_time[3], "s \n")
+cat("Time to get pairwise linear propensity distances between all points=", lowdim_D_time[3], "s \n")
+cat("Time to obtain full matching over data=", lowdim_S_time[3], "s \n")
+
+cat("\n")
+
+cat("High Dimensional Dataset:")
+cat("Time to train LR model=", highdim_p1_time[3], "s \n")
+cat("Time to estimate propensity scores=", highdim_p1scores_time[3], "s \n")
+cat("Time to get pairwise linear propensity distances between all points=", highdim_D_time[3], "s \n")
+cat("Time to obtain full matching over data=", highdim_S_time[3], "s \n")
+```
+
+
+
+
+
+
+
+
+
+
+
+
+

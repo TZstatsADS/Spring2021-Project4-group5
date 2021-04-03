@@ -41,15 +41,16 @@ net_discrepancy <- function(S, D){
 find_closest_comparison <- function(e, U, D){
   min_disc <- Inf
   closest_comp <- NULL
-  curr_idx <- e[1]
-  for(i in 1:dim(D)[1]){
-    if(i != curr_idx){
-      curr_e <- U[i,]
-      curr_disc <- D[curr_idx, i]
-      if((curr_e[3] != e[3]) & (curr_disc < min_disc)){
-        min_disc <- curr_disc
-        closest_comp <- curr_e
-      }
+  n <- dim(U)[1]
+  e_idx <- e[1]
+  
+  for(i in 1:n){
+    curr_e <- U[i,]
+    curr_idx <- curr_e[1]
+    curr_disc <- D[e_idx, curr_idx]
+    if((curr_e[3] != e[3]) & (curr_disc < min_disc)){
+      min_disc <- curr_disc
+      closest_comp <- curr_e
     }
   }
   
@@ -68,15 +69,15 @@ propensity_matching_root <- function(U, D){
 
 propensity_matching <- function(U, S, D){
   # Base Case
-  if(!U){
+  if(is.null(U)){
     return(S)
   }
   
   # Pop new example from U
   n <- dim(U)[1]
-  if(!is.null(n)){
+  if(is.null(n)){
     e <- U
-    new_U <- FALSE
+    new_U <- c()
   }
   else{
     e <- U[n,]
@@ -119,7 +120,7 @@ propensity_matching <- function(U, S, D){
       S.size <- length(new_S)
       new_S[[S.size + 1]] <- new_group
       
-      new_S <- propensity_matching(U, new_S, D)
+      new_S <- propensity_matching(new_U, new_S, D)
       net_dis <- net_discrepancy(new_S, D)
       
       # Check if this is better
@@ -129,6 +130,7 @@ propensity_matching <- function(U, S, D){
       }
     }
   }
+  
   
   return(best_S)
   

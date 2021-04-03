@@ -4,10 +4,10 @@
 
 # S will be a list of lists corresponding to the matching assignment
 # Y will be the outcome vector
-# n is the number of examples we have in our data
 
-estimate_ATE <- function(S, Y, n){
+estimate_ATE <- function(S, Y){
   S.size <- length(S)
+  n <- length(Y) # number of data points we have
   n_i <- c() # vector of number of examples in each group
   subclass_ATEs <- c() # average treatment effects from each subclass
   
