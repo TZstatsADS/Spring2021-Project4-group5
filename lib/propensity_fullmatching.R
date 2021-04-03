@@ -26,13 +26,15 @@ net_discrepancy <- function(S, D){
             idx1 <- curr_group[[j]][1]
             idx2 <- curr_group[[k]][1]
             d <- D[idx1, idx2]
-            total_dis <- total_dis + d
+            total_disc <- total_disc + d
           }
           
         }
       }
     }
   }
+  
+  return(total_disc)
   
 }
 
@@ -65,10 +67,21 @@ propensity_matching_root <- function(U, D){
 
 
 propensity_matching <- function(U, S, D){
+  # Base Case
+  if(!U){
+    return(S)
+  }
+  
   # Pop new example from U
   n <- dim(U)[1]
-  e <- U[n,]
-  new_U <- U[1:n-1,]
+  if(!is.null(n)){
+    e <- U
+    new_U <- FALSE
+  }
+  else{
+    e <- U[n,]
+    new_U <- U[1:n-1,]
+  }
   min_discrepancy <- Inf
   best_S <- NULL
   
@@ -94,22 +107,27 @@ propensity_matching <- function(U, S, D){
     }
   }
   
-  # Test if putting e in new group will work best
-  e_prime <- find_closest_comparison(e, U, D)
-  new_group <- list()
-  new_group[[1]] <- e
-  new_group[[2]] <- e_prime
-  new_S <- S
-  S.size <- length(new_S)
-  new_S[[S.size + 1]] <- new_group
-  
-  new_S <- propensity_matching(U, new_S, D)
-  net_dis <- net_discrepancy(new_S, D)
-  
-  # Check if this is better
-  if (net_dis < min_discrepancy) {
-    min_discrepancy <- net_dis
-    best_S <- new_S
+  # Only if current example is not last example to be placed
+  if(!is.null(n)){
+    # Test if putting e in new group will work best
+    e_prime <- find_closest_comparison(e, U, D)
+    if(!is.null(e_prime)){
+      new_group <- list()
+      new_group[[1]] <- e
+      new_group[[2]] <- e_prime
+      new_S <- S
+      S.size <- length(new_S)
+      new_S[[S.size + 1]] <- new_group
+      
+      new_S <- propensity_matching(U, new_S, D)
+      net_dis <- net_discrepancy(new_S, D)
+      
+      # Check if this is better
+      if (net_dis < min_discrepancy) {
+        min_discrepancy <- net_dis
+        best_S <- new_S
+      }
+    }
   }
   
   return(best_S)

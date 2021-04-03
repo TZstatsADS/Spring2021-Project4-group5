@@ -1845,12 +1845,14 @@ highdim_D &lt;- get_distance_matrix(highdim_U)</code></pre>
 <p>Now, we obtain the matching assignments via our Full Matching algorithm (details in Piazza post 118).</p>
 <!-- rnb-text-end -->
 <!-- rnb-chunk-begin -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuc291cmNlKFwiLi4vbGliL3Byb3BlbnNpdHlfZnVsbG1hdGNoaW5nLlJcIilcblxubG93ZGltX1MgPC0gcHJvcGVuc2l0eV9tYXRjaGluZ19yb290KGxvd2RpbV9VLCBsb3dkaW1fRClcbmhpZ2hkaW1fUyA8LSBwcm9wZW5zaXR5X21hdGNoaW5nX3Jvb3QoaGlnaGRpbV9VLCBoaWdoZGltX0QpXG5gYGAifQ== -->
+<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuc291cmNlKFwiLi4vbGliL3Byb3BlbnNpdHlfZnVsbG1hdGNoaW5nLlJcIilcblxubG93ZGltX1MgPC0gcHJvcGVuc2l0eV9tYXRjaGluZ19yb290KGxvd2RpbV9VLCBsb3dkaW1fRClcbmBgYCJ9 -->
 <pre class="r"><code>source(&quot;../lib/propensity_fullmatching.R&quot;)
 
-lowdim_S &lt;- propensity_matching_root(lowdim_U, lowdim_D)
-highdim_S &lt;- propensity_matching_root(highdim_U, highdim_D)</code></pre>
+lowdim_S &lt;- propensity_matching_root(lowdim_U, lowdim_D)</code></pre>
 <!-- rnb-source-end -->
+<!-- rnb-output-begin eyJkYXRhIjoiRXJyb3IgaW4gVVtuLCBdIDogaW5jb3JyZWN0IG51bWJlciBvZiBkaW1lbnNpb25zXG4ifQ== -->
+<pre><code>Error in U[n, ] : incorrect number of dimensions</code></pre>
+<!-- rnb-output-end -->
 <!-- rnb-chunk-end -->
 <!-- rnb-text-begin -->
 <!-- rnb-text-end -->
