@@ -1,0 +1,125 @@
+---
+title: "regression trees matching"
+author: "Yandong Xiong"
+date: "2021/3/31"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## import needed packages
+```{r}
+require(MatchIt)
+require(dplyr)
+require(ggplot2)
+require(Hmisc)
+require(rpart)
+require(partykit)
+require(RItools)
+require(glmnet)
+```
+
+## import datasets
+```{r}
+data.l = read.csv("../data/lowDim_dataset.csv") %>% mutate(A = as.factor(A))
+data.h = read.csv("../data/highDim_dataset.csv") %>% mutate(A = as.factor(A))
+head(data.l)
+head(data.h)
+```
+
+## paring 8 on lowDim data
+```{r}
+set.seed(2020)
+
+tree = rpart(A~., data = data.l[,-1], method = "class")
+min_cp = tree$cptable[which.min(tree$cptable[,"xerror"]),"CP"]
+tree_prune = prune(tree, cp=min_cp)
+ps = predict(tree_prune, data.l[,-1], type = "prob")[,2]
+treat_ps = cbind(1:500, data.l[,"A"],ps)
+colnames(treat_ps) = c("index", "treatOrNot", "propensityScore")
+#head(treat_ps,100)
+ps.dt = as_tibble(treat_ps)
+treated = ps.dt %>% filter(treatOrNot == 2)
+(treated_score = unique(treated$propensityScore))
+notTreated = ps.dt %>% filter(treatOrNot == 1)
+(notTreated_score = unique(notTreated$propensityScore))
+discarded = as.matrix(ps.dt[1,])
+matched_t = as.matrix(ps.dt[1,])
+matched_nt = as.matrix(ps.dt[1,])
+matched_score = treated_score[sort(treated_score) == sort(notTreated_score)]
+for (i in 1:length(matched_score)) {
+  matched_t = rbind(matched_t, treated%>%filter(propensityScore==matched_score[i]))
+  matched_nt = rbind(matched_nt, notTreated%>%filter(propensityScore==matched_score[i]))
+}
+matched_t = matched_t[-1,]
+matched_nt = matched_nt[-1,]
+matched_dt = data.l[sort(c(matched_t$index,matched_nt$index)),]
+dim(matched_dt)
+head(matched_dt,50)
+```
+# paring 8 on highDim data
+```{r}
+set.seed(2020)
+
+tree = rpart(A~., data = data.h[,-1], method = "class")
+min_cp = tree$cptable[which.min(tree$cptable[,"xerror"]),"CP"]
+tree_prune = prune(tree, cp=min_cp)
+ps = predict(tree_prune, data.h[,-1], type = "prob")[,2]
+treat_ps = cbind(1:500, data.h[,"A"],ps)
+colnames(treat_ps) = c("index", "treatOrNot", "propensityScore")
+#head(treat_ps,100)
+ps.dt = as_tibble(treat_ps)
+treated = ps.dt %>% filter(treatOrNot == 2)
+(treated_score = unique(treated$propensityScore))
+notTreated = ps.dt %>% filter(treatOrNot == 1)
+(notTreated_score = unique(notTreated$propensityScore))
+discarded = as.matrix(ps.dt[1,])
+matched_t = as.matrix(ps.dt[1,])
+matched_nt = as.matrix(ps.dt[1,])
+matched_score = treated_score[sort(treated_score) == sort(notTreated_score)]
+for (i in 1:length(matched_score)) {
+  matched_t = rbind(matched_t, treated%>%filter(propensityScore==matched_score[i]))
+  matched_nt = rbind(matched_nt, notTreated%>%filter(propensityScore==matched_score[i]))
+}
+matched_t = matched_t[-1,]
+matched_nt = matched_nt[-1,]
+matched_dt = data.h[sort(c(matched_t$index,matched_nt$index)),]
+dim(matched_dt)
+head(matched_dt,50)
+```
+
+
+# paring 24 on lowDim data
+```{r}
+set.seed(2020)
+x = model.matrix(A~.,data.l[,-1])[,-1]
+y = data.l[,2]
+cv.lasso <- cv.glmnet(x, y, alpha = 1, family = "binomial")
+fit_lasso = glmnet(x, y, family = "binomial", alpha = 1, lambda = cv.lasso$lambda.min)
+
+ps = predict(fit_lasso, s = cv.lasso$lambda.min, newx = x)
+
+treat_ps = cbind(1:500, data.l[,"A"],ps)
+colnames(treat_ps) = c("index", "treatOrNot", "propensityScore")
+#head(treat_ps,100)
+ps.dt = as_tibble(treat_ps)
+treated = ps.dt %>% filter(treatOrNot == 2)
+(treated_score = unique(treated$propensityScore))
+notTreated = ps.dt %>% filter(treatOrNot == 1)
+(notTreated_score = unique(notTreated$propensityScore))
+discarded = as.matrix(ps.dt[1,])
+matched_t = as.matrix(ps.dt[1,])
+matched_nt = as.matrix(ps.dt[1,])
+matched_score = treated_score[sort(treated_score) == sort(notTreated_score)]
+for (i in 1:length(matched_score)) {
+  matched_t = rbind(matched_t, treated%>%filter(propensityScore==matched_score[i]))
+  matched_nt = rbind(matched_nt, notTreated%>%filter(propensityScore==matched_score[i]))
+}
+matched_t = matched_t[-1,]
+matched_nt = matched_nt[-1,]
+matched_dt = data.l[sort(c(matched_t$index,matched_nt$index)),]
+dim(matched_dt)
+head(matched_dt,50)
+```
