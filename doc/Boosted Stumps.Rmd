@@ -1,0 +1,117 @@
+---
+title: "Boosted Stumps"
+author: "chuyun shu cs3894"
+date: "3/26/2021"
+output: html_document
+---
+
+```{r}
+packages.used <- c("grDevices","gbm")
+# check packages that need to be installed.
+packages.needed <- setdiff(packages.used, 
+                           intersect(installed.packages()[,1], 
+                                     packages.used))
+# install additional packages
+if(length(packages.needed) > 0){
+  install.packages(packages.needed, dependencies = TRUE)
+}
+library(grDevices)
+library(gbm)
+```
+
+```{r}
+path = './data/'
+highdim = read_csv(paste0(path, 'highDim_dataset.csv')) #2000  187
+lowdim = read_csv(paste0(path, 'lowDim_dataset.csv')) #475  24
+```
+
+## Boosting Stumps
+### For High Dimension Data
+```{r}
+set.seed(0)
+prop.fit.high_bs <- highdim[, setdiff(names(highdim), 'Y')]
+gbmWithCrossValidation_high = gbm(formula = A~.,
+                             distribution = "bernoulli",
+                             data = prop.fit.high_bs,
+                             n.trees = 1000,
+                             shrinkage = 0.01,
+                             n.minobsinnode = 20, 
+                             interaction.depth=1,
+                             train.fraction=1.0,
+                             cv.folds = 5,
+                             n.cores = 1)
+bestTreeForPrediction_high = gbm.perf(gbmWithCrossValidation_high)
+start.time_ps_high_BS <- Sys.time()
+gbm1 <- gbm(A~.,                # predicts z from all other variables       
+            data=prop.fit.high_bs,       # the dataset dropping y       
+            distribution="bernoulli", # indicates logistic regression       
+            n.trees=bestTreeForPrediction_high,            # runs for 500 iterations       
+            shrinkage=0.01,         # sets the shrinkage parameter       
+            interaction.depth=1,      # addictive model      
+            bag.fraction=0.5,         # sets fraction used for Friedman's random subsampling of the data       
+            train.fraction=1.0,       # train.fraction<1.0 allows for out-of-sample prediction for stopping the algorithm   
+            n.minobsinnode=20
+            )        # minimum node size for trees 
+pscore_bs_h <-  1 / (1 + exp(-gbm1$fit))
+end.time_ps_high_BS <- Sys.time()
+high_cp_bs <- highdim
+high_cp_bs$pscore=pscore_bs_h
+time_ps_high_BS <- end.time_ps_high_BS - start.time_ps_high_BS
+time_ps_high_BS
+```
+
+```{r}
+col.alpha = function(color,alpha){
+  code = col2rgb(color)/256
+  rgb(code[1],code[2],code[3],alpha)
+}
+hist(high_cp_bs$pscore[high_cp_bs$A==1], breaks=20,col=col.alpha('red',.5),freq=FALSE,
+     ylim=c(0,6),xlab="Propensity Score", ylab="",main="")
+lines(density(high_cp_bs$pscore[high_cp_bs$A==1]),col='red')
+hist(high_cp_bs$pscore[high_cp_bs$A==0],breaks=20,col=col.alpha('blue',.5),freq=FALSE,
+     ylim=c(0,6),add=TRUE)
+lines(density(high_cp_bs$pscore[high_cp_bs$A==0]),col='blue')
+```
+
+### For Low Dimension Data
+```{r}
+set.seed(0)
+prop.fit.low_bs <- lowdim[, setdiff(names(lowdim), 'Y')]
+gbmWithCrossValidation_low = gbm(formula = A~.,
+                             distribution = "bernoulli",
+                             data = prop.fit.low_bs,
+                             n.trees = 500,
+                             shrinkage = 0.01,
+                             n.minobsinnode = 20, 
+                             interaction.depth=1,
+                             train.fraction=1.0,
+                             cv.folds = 5,
+                             n.cores = 1)
+bestTreeForPrediction_low = gbm.perf(gbmWithCrossValidation_low)
+start.time_ps_low_BS <- Sys.time()
+gbm2 <- gbm(A~.,                # predicts z from all other variables       
+            data=prop.fit.low_bs,       # the dataset dropping y       
+            distribution="bernoulli", # indicates logistic regression       
+            n.trees=bestTreeForPrediction_low,            # runs for 95 iterations       
+            shrinkage=0.01,         # sets the shrinkage parameter       
+            interaction.depth=1,      # maximum allowed interaction degree       
+            bag.fraction=0.5,         # sets fraction used for Friedman's random subsampling of the data       
+            train.fraction=1.0,       # train.fraction<1.0 allows for out-of-sample prediction for stopping the algorithm   
+            n.minobsinnode=20)        # minimum node size for trees 
+pscore_bs_l <-  1 / (1 + exp(-gbm2$fit))
+end.time_ps_low_BS <- Sys.time()
+low_cp_bs <- lowdim
+low_cp_bs$pscore=pscore_bs_l
+time_ps_low_BS <- end.time_ps_low_BS - start.time_ps_low_BS
+time_ps_low_BS
+```
+
+
+```{r}
+hist(low_cp_bs$pscore[low_cp_bs$A==1], breaks=20,col=col.alpha('red',.5),freq=FALSE,
+     ylim=c(0,16),xlab="Propensity Score", ylab="",main="")
+lines(density(low_cp_bs$pscore[low_cp_bs$A==1]),col='red')
+hist(low_cp_bs$pscore[low_cp_bs$A==0],breaks=20,col=col.alpha('blue',.5),freq=FALSE,
+     ylim=c(0,16),add=TRUE)
+lines(density(low_cp_bs$pscore[low_cp_bs$A==0]),col='blue')
+```
