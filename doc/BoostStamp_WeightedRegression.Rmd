@@ -1,0 +1,363 @@
+---
+title: "aaaaa"
+author: "Ruize Yu"
+date: "4/3/2021"
+output: pdf_document
+---
+
+```{r,warning=FALSE,message=FALSE}
+library(Matching)
+library(glmnet)
+library(tidyverse)
+library(ggplot2)
+library(gbm)
+library(optmatch)
+library(MatchIt)
+```
+
+## Load data
+```{r}
+ldim <- read.csv('D:/Spring2021-Project1-JoJoHunter/project4/data/lowDim_dataset.csv')
+hdim <- read.csv('D:/Spring2021-Project1-JoJoHunter/project4/data/highDim_dataset.csv')
+# Low Dim
+ltr <- ldim$A
+ly <- ldim$Y
+lx <- ldim[,-c(1,2)]
+# High Dim
+htr <- hdim$A
+hy <- hdim$Y
+hx <- hdim[, -c(1,2)]
+```
+
+## A1+D3+P5 Propensity Matching + Boosted Stumps
+
+## Calculate propensity score
+```{r}
+set.seed(2020) 
+start_time <- Sys.time()
+
+gbml <- gbm(A~., data = ldim[-1], 
+                distribution = "bernoulli",
+                n.trees = 60, # the number of trees
+                shrinkage = 0.1, # learning rate
+                interaction.depth = 1, # total split
+                n.minobsinnode = 10,
+                bag.fraction = 1
+                )
+end_time <- Sys.time()
+tm1 <- end_time - start_time
+cat("Time to tain gbm on low dim:", tm1, "seconds.")
+```
+
+```{r}
+start_time <- Sys.time()
+gbml.fit <- predict(gbml, newx = data.matrix(lx), n.trees = 60,type = "response")
+
+end_time <- Sys.time()
+tm2 <- end_time - start_time
+cat("Time to calculate low dim propensity score:", tm2, "seconds.")
+```
+
+
+```{r}
+set.seed(2020)
+start_time <- Sys.time()
+gbmh <- gbm(A~., data = hdim[-1], 
+                distribution = "bernoulli",
+                n.trees = 60, # the number of trees
+                shrinkage = 0.1, # learning rate
+                interaction.depth = 1, # total split
+                n.minobsinnode = 10,
+                bag.fraction = 1
+                )
+end_time <- Sys.time()
+tm3 <- end_time - start_time
+cat("Time to tain gbm on high dim:", tm3, "seconds.")
+```
+
+```{r}
+start_time <- Sys.time()
+  
+gbmh.fit <- predict(gbmh, hx, n.trees = 60,type = "response")
+
+end_time <- Sys.time()
+tm4 <- end_time - start_time
+cat("Time to calculate high dim propensity score:", tm4, "seconds.")
+
+```
+## Logit function used to calculate linear propensity score
+```{r}
+logit <- function(p){
+  output <- log(p/(1-p))
+  return(output)
+}
+```
+
+```{r}
+lowdim_data_match <- subset(ldim, select = -c(Y))
+highdim_data_match <- subset(hdim, select = -c(Y))
+lowdim_matches <- list()
+highdim_matches <- list()
+lowdim_match_times <- list()
+highdim_match_times <- list()
+```
+
+## Distance
+```{r}
+p_score_list <- list(l=glm1.fit,h=glm2.fit)
+
+start_time <- Sys.time()
+gbml.fit <- p_score_list$l
+
+n1 <- length(gbml.fit)
+dt1 <- matrix(0,nrow = n1, ncol = n1) 
+for (i in 1:(n1-1)){
+  dt1[i,i] <- 1
+  for (j in (i+1):n1){
+    dt1[i,j] <- abs(logit(gbml.fit[i]) - logit(gbml.fit[j]))
+    dt1[j,i] <- dt1[i,j]
+  }
+}
+end_time <- Sys.time()
+tm5 <- end_time - start_time
+cat("Time to get pairwise linear propensity distances on low dim:", tm5, "seconds.")
+```
+
+```{r}
+start_time <- Sys.time()
+gbmh.fit <- p_score_list$h  
+n2 <- length(gbmh.fit)
+dt2 <- matrix(0,nrow = n2, ncol = n2) 
+for (i in 1:(n2-1)){
+  dt2[i,i] <- 1
+  for (j in (i+1):n2){
+    dt2[i,j] <- abs(logit(gbmh.fit[i]) - logit(gbmh.fit[j]))
+    dt2[j,i] <- dt2[i,j]
+  }
+}
+end_time <- Sys.time()
+tm6 <- end_time - start_time
+cat("Time to get pairwise linear propensity distances on high dim:", tm6, "seconds.")
+  
+dist_mat_list <- list(lm=dt1,hm=dt2)
+```
+
+## Matching Function
+```{r, warning=FALSE}
+cal_neighbour <- function(index,df,thresh,y,A){
+  dt_vec <- df[index,]
+  ind_vec <- which(dt_vec<thresh)
+  ind_final <- ind_vec[A[index]!=A[ind_vec]]
+  
+  if (length(ind_final) == 0){
+    return(NA)
+  }
+  else{
+    return(list(mean(y[ind_final]),ind_final))
+  }
+  
+}
+```
+
+## Match low dim
+```{r, warning=FALSE}
+seq = 100:2000/10000
+start_time <- Sys.time()
+
+  dt1 <- dist_mat_list$lm
+  a <- as.vector(dt1)
+  
+  ATE_low <- vector("double")
+  pairs_low <- vector("double")
+  for (percentage in seq){
+    threshold <- quantile(a,percentage)
+    
+    n1_vec <- 1:nrow(dt1)
+    list_1 <- lapply(n1_vec, cal_neighbour, df = dt1, thresh = threshold, y = ly, A = ltr)
+    mean_list_1 <- lapply(n1_vec, function(x) unlist(list_1[[x]][1]))
+    mean_cal_1 <- unlist(mean_list_1)
+    neighbour_list_1 <- lapply(n1_vec, function(x) unlist(list_1[[x]][2]))
+    
+    df_1 <- (data.frame(Y = ly, A = ltr)
+             %>%mutate(ind = row_number())
+             %>%mutate(AAA = neighbour_list_1)
+             %>%mutate(mean_cal = mean_cal_1)
+             %>%filter(!is.na(mean_cal))
+             %>%mutate(ATE = (Y-mean_cal)*ifelse(A==0,-1,1))
+    )
+    
+    ATE_low <- append(ATE_low,mean(df_1$ATE))
+    pairs_low <- append(pairs_low,sum(!is.na(unlist(neighbour_list_1)))/2)
+  }
+  
+ATE_check <- ATE_low
+  
+ATE_low <- ATE_low[!is.na(ATE_low)]
+pairs_low <- pairs_low[pairs_low != 0]
+  
+low_list <- list(ate=ATE_low,pair=pairs_low)
+end_time <- Sys.time()
+tm7 <- end_time - start_time
+cat("Time for Propensity Matching Low_Dim is:", tm7, "seconds.")
+```
+
+## Match high dim
+```{r, warning=FALSE}
+start_time <- Sys.time()
+seq = 100:2000/10000
+
+  dt2 <- dist_mat_list$hm
+  a_h <- as.vector(dt2)
+  
+  ATE_high <- vector("double")
+  pairs_high <- vector("double")
+  
+  for (percentage in seq){
+    threshold <- quantile(a_h,percentage)
+    
+    n2_vec <- 1:nrow(dt2)
+    list_2 <- lapply(n2_vec, cal_neighbour, df = dt2, thresh = threshold, y = hy, A = htr)
+    mean_list_2 <- lapply(n2_vec,function(x) unlist(list_2[[x]][1]))
+    mean_cal_2 <- unlist(mean_list_2)
+    neighbour_list_2 <- lapply(n2_vec,function(x) unlist(list_2[[x]][2]))
+    
+    df_2 <- (data.frame(Y = hy, A = htr)
+             %>%mutate(ind = row_number())
+             %>%mutate(AAA = neighbour_list_2)
+             %>%mutate(mean_cal = mean_cal_2)
+             %>%filter(!is.na(mean_cal))
+             %>%mutate(ATE = (Y-mean_cal)*ifelse(A==0,-1,1))
+    )
+    
+    ATE_high <- append(ATE_high,mean(df_2$ATE))
+    pairs_high <- append(pairs_high,sum(!is.na(unlist(neighbour_list_2)))/2)
+  }
+  
+ATE_high <- ATE_low[!is.na(ATE_high)]
+pairs_high <- pairs_low[pairs_high != 0]
+
+
+high_list <- list(ate=ATE_high,pair=pairs_high)
+end_time <- Sys.time()
+tm8 <- end_time - start_time
+cat("Time for Propensity Matching High_Dim is:", tm8, "minutes.")
+```
+
+## Low dim ATE
+```{r, figures-side, fig.show="hold", out.width="25%", warning=FALSE}
+ATE_ps_low <- vector("double")
+
+ATE_low <- low_list$ate
+pairs_low <- low_list$pair
+ATE_ps_low <- append(ATE_ps_low,ATE_low[40:60])
+  
+
+
+cat("mean ATE =",mean(ATE_ps_low))
+cat("std ATE =",sd(ATE_ps_low))
+```
+
+## High dim ATE
+```{r, fig.show="hold", out.width="25%", warning=FALSE}
+ATE_ps_high <- vector("double")
+
+ATE_high <- high_list$ate
+pairs_high <- high_list$pair
+ATE_ps_high <- append(ATE_ps_high,ATE_high[40:60])
+
+cat("mean ATE =",mean(ATE_ps_high))
+cat("std ATE =",sd(ATE_ps_high))
+```
+
+```{r}
+matrix(c(mean(ATE_ps_high),mean(ATE_ps_low),
+         tm3,tm1,
+         tm4,tm2,
+         tm6,tm5,
+         tm8*60,tm7),
+       nrow = 5,byrow = TRUE,
+       dimnames = list(c("ATE_PSM_BS","train_model_time",'estimate_propensity_score_time','Get_linear_propentisy_distance_time','Match_time'), c("highDim","lowDim")))
+```
+
+
+
+
+## A7+P2 Weighted Regression + L1 penalized logistic regression
+```{r}
+df_ld <- ldim %>% mutate(A = factor(A))
+df_hd <- hdim %>% mutate(A = factor(A))
+```
+
+## Low dim propensity score and ATE
+```{r,warning=FALSE,message=FALSE}
+set.seed(0)
+X_low <- df_ld %>% select(-Y, -A) %>% as.matrix
+A_low <- df_ld %>% select(A) %>% as.matrix
+cv_l1 <- cv.glmnet(X_low, A_low, family = "binomial", alpha = 1)
+start_time <- Sys.time()
+l1_low <- glmnet(X_low, A_low, family = "binomial", 
+                 alpha = 1, lambda = cv_l1$lambda.min)
+propen_score_low <- predict(l1_low, X_low, type = "response")
+# Find weights
+weight_low <- cbind(as.numeric(A_low), propen_score_low) %>% 
+  as_tibble %>%
+  mutate(weights = (V1/s0 + (1-V1)/(1-s0))) %>%
+  select(weights)
+# Select covarites
+filter_low <- summary(lm(Y~., data = df_ld))$coef[,4][3:24]<0.05
+Z_low <- cbind(A_low, X_low[,filter_low])
+Z_low <- Z_low %>% apply(2, as.numeric)
+# Calculate ATE
+Y_low <- df_ld$Y
+weighted_low <- lm(Y_low ~ Z_low, weights = as.numeric(unlist(weight_low)))
+ATE_low <- coef(weighted_low)[2]
+end_time <- Sys.time()
+running_time_low = end_time - start_time
+```
+
+## High dim propensity score and ATE
+```{r}
+set.seed(0)
+X_high <- df_hd %>% select(-Y, -A) %>% as.matrix
+A_high <- df_hd %>% select(A) %>% as.matrix
+cv_l1_high <- cv.glmnet(X_high, A_high, family = "binomial", alpha = 1)
+start_time <- Sys.time()
+l1_high <- glmnet(X_high, A_high, family = "binomial", 
+                  alpha = 1, lambda = cv_l1_high$lambda.min)
+propen_score_high <- predict(l1_high, X_high, type = "response")
+# Find weights
+weight_high <- cbind(as.numeric(A_high), propen_score_high) %>%
+  as_tibble %>%
+  mutate(weights = (V1/s0) + (1-V1)/(1-s0)) %>%
+  select(weights)
+# Select covariates
+filter_high <- summary(lm(Y~., data = df_hd))$coef[,4][3:ncol(X_high)]<0.05
+Z_high <- cbind(A_high, X_high[,filter_high])
+Z_high <- Z_high %>% apply(2, as.numeric)
+# Calculate ATE
+Y_high <- df_hd$Y
+weighted_high <- lm(Y_high ~ Z_high, weights = as.numeric(unlist(weight_high)))
+ATE_high <- coef(weighted_high)[2]
+end_time <- Sys.time()
+running_time_high = end_time - start_time
+```
+
+## Result
+```{r}
+
+
+matrix(c(mean(ATE_ps_high),mean(ATE_ps_low),
+         tm3,tm1,
+         tm4,tm2,
+         tm6,tm5,
+         tm8*60,tm7,
+         ATE_high,ATE_low,
+         running_time_high,running_time_low),
+       nrow = 7,byrow = TRUE,
+       dimnames = list(c("ATE_PSM_BS","train_model_time",'estimate_propensity_score_time','Get_linear_propentisy_distance_time','Match_time',"ATE_weighted_regression","running_time"),c("highDim","lowDim")))
+```
+
+
+
+
+
