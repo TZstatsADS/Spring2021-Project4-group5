@@ -146,25 +146,52 @@ highdim_matches[[1]]
 
 We obtain the matched datasets, and bind our outcome Y back to them
 ```{r}
-md.low <- match.data(m.out.low)
-Y.low <- lowdim_data$Y
-md.low <- as.data.frame(cbind(Y.low, md.low))
+lowdim_match_sets <- list()
+highdim_match_sets <- list()
+for(i in 1:m){
+  lowdim_match_sets[[i]] <- match.data(lowdim_matches[[i]])
+  Y.low <- lowdim_data$Y
+  lowdim_match_sets[[i]] <- as.data.frame(cbind(Y.low, lowdim_match_sets[[i]]))
+}
+for(i in 1:m){
+  highdim_match_sets[[i]] <- match.data(highdim_matches[[i]])
+  Y.high <- highdim_data$Y
+  highdim_match_sets[[i]] <- as.data.frame(cbind(Y.high, highdim_match_sets[[i]]))
+}
 
-md.high <- match.data(m.out.high)
-Y.high <- highdim_data$Y
-md.high <- as.data.frame(cbind(Y.high, md.high))
+#md.low <- match.data(m.out.low)
+#Y.low <- lowdim_data$Y
+#md.low <- as.data.frame(cbind(Y.low, md.low))
+
+#md.high <- match.data(m.out.high)
+#Y.high <- highdim_data$Y
+#md.high <- as.data.frame(cbind(Y.high, md.high))
 ```
 
 Finally, we estimate our ATEs
 ```{r}
-fit.low <- lm(Y.low ~ A, data = md.low, weights = weights)
-coeftest(fit.low, vcov. = vcovCL, cluster = ~subclass)
+lowdim_ATEs <- c()
+highdim_ATEs <- c()
 
-fit.high <- lm(Y.high ~ A, data = md.high, weights = weights)
-coeftest(fit.high, vcov. = vcovCL, cluster = ~subclass)
+for(i in 1:m){
+  fit.low <- lm(Y.low ~ A, data = lowdim_match_sets[[i]], weights = weights)
+  coeftest(fit.low, vcov. = vcovCL, cluster = ~subclass)
+  lowdim_ATEs <- c(lowdim_ATEs, summary(fit.low)$coefficients["A", "Estimate"])
+}
+for(i in 1:m){
+  fit.high <- lm(Y.high ~ A, data = highdim_match_sets[[i]], weights = weights)
+  coeftest(fit.high, vcov. = vcovCL, cluster = ~subclass)
+  highdim_ATEs <- c(highdim_ATEs, summary(fit.high)$coefficients["A", "Estimate"])
+}
 
-ATE.low <- summary(fit.low)$coefficients["A", "Estimate"]
-ATE.high <- summary(fit.high)$coefficients["A", "Estimate"]
+#fit.low <- lm(Y.low ~ A, data = md.low, weights = weights)
+#coeftest(fit.low, vcov. = vcovCL, cluster = ~subclass)
+
+#fit.high <- lm(Y.high ~ A, data = md.high, weights = weights)
+#coeftest(fit.high, vcov. = vcovCL, cluster = ~subclass)
+
+#ATE.low <- summary(fit.low)$coefficients["A", "Estimate"]
+#ATE.high <- summary(fit.high)$coefficients["A", "Estimate"]
 ```
 We can see that both estimates have decently low p-values. Although the p-value for the low-dimensional case is above 0.05, our standard alpha-level, it is close enough that we can proceed with caution that it is significantly different from zero.
 
@@ -179,28 +206,54 @@ highdim_ATE_real <- -54.8558
 sd.low <- sd(Y.low)
 sd.high <- sd(Y.high)
 
-ATE_diff.low <- (ATE.low - lowdim_ATE_real)/sd.low
-ATE_diff.high <- (ATE.high - highdim_ATE_real)/sd.high
+ATE_diff.low <- (lowdim_ATEs - lowdim_ATE_real)/sd.low
+ATE_diff.high <- (highdim_ATEs- highdim_ATE_real)/sd.high
 
-ATE_diff.low
-ATE_diff.high
+method_names <- c("A1 + D3 + P1", "A1 + D3 + P2", "A1 + D3 + P3")
+
+ATE_table <- as.matrix(cbind(lowdim_ATEs, ATE_diff.low, highdim_ATEs, ATE_diff.high))
+rownames(ATE_table) <- method_names
+colnames(ATE_table) <- c("Low-Dim ATE Estimate", "Low-Dim Error in SDs", "High-Dim ATE Estimate", "High-Dim Error in SDs")
+ATE_table
 ```
 
 Not bad! 
 
 Now, let's take a look at the time our algorithm took:
 ```{r}
-cat("Low Dimensional Dataset:")
-cat("Time to train LR model=", lowdim_p1_time[3], "s \n")
-cat("Time to estimate propensity scores=", lowdim_p1scores_time[3], "s \n")
-cat("Time to obtain full matching over data=", lowdim_S_time[3], "s \n")
+lowdim_model_time <- c()
+highdim_model_time <- c()
+lowdim_score_time <- c()
+highdim_score_time <- c()
+lowdim_match_time <- c()
+highdim_match_time <- c()
 
-cat("\n")
+for(i in 1:m){
+  lowdim_model_time <- c(lowdim_model_time, lowdim_model_times[[i]][3])
+  highdim_model_time <- c(highdim_model_time, highdim_model_times[[i]][3])
+  lowdim_score_time <- c(lowdim_score_time, lowdim_score_times[[i]][3])
+  highdim_score_time <- c(highdim_score_time, highdim_score_times[[i]][3])
+  lowdim_match_time <- c(lowdim_match_time, lowdim_match_times[[i]][3])
+  highdim_match_time <- c(highdim_match_time, highdim_match_times[[i]][3])
+}
 
-cat("High Dimensional Dataset:")
-cat("Time to train LR model=", highdim_p1_time[3], "s \n")
-cat("Time to estimate propensity scores=", highdim_p1scores_time[3], "s \n")
-cat("Time to obtain full matching over data=", highdim_S_time[3], "s \n")
+time_table <- as.matrix(cbind(lowdim_model_time, highdim_model_time, lowdim_score_time, highdim_score_time, lowdim_match_time, highdim_match_time))
+rownames(time_table) <- method_names
+colnames(time_table) <- c("Low-Dim Model Train Time", "High-Dim Model Train Time", "Low-Dim Scoring Time", "High-Dim Scoring Time", "Low-Dim Matching Time", "High-Dim Matching Time")
+
+time_table
+
+# cat("Low Dimensional Dataset:")
+# cat("Time to train LR model=", lowdim_p1_time[3], "s \n")
+# cat("Time to estimate propensity scores=", lowdim_p1scores_time[3], "s \n")
+# cat("Time to obtain full matching over data=", lowdim_S_time[3], "s \n")
+# 
+# cat("\n")
+# 
+# cat("High Dimensional Dataset:")
+# cat("Time to train LR model=", highdim_p1_time[3], "s \n")
+# cat("Time to estimate propensity scores=", highdim_p1scores_time[3], "s \n")
+# cat("Time to obtain full matching over data=", highdim_S_time[3], "s \n")
 ```
 
 As we can see with quadruple the data, the full matching algorithm took about 16.781 times longer for the high-dimensional dataset, and the other components of the process were negligible in comparison. So, we can hypothesis that we have an O(n^2) time complexity. 
