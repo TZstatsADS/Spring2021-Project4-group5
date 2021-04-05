@@ -1,5 +1,6 @@
 ---
 title: "ATE Estimation using Full Propensity Matching (implemented from scratch) and Linear Propensity Scoring"
+author: "Amir Idris"
 output: html_notebook
 ---
 
@@ -11,9 +12,147 @@ if(!require("dplyr")){
 if(!require("MatchIt")){
   install.packages("MatchIt")
 }
+if(!require("lmtest")){
+  install.packages("lmtest")
+}
+if(!require("sandwich")){
+  install.packages("sandwich")
+}
+if(!require("boot")){
+  install.packages("boot")
+}
+if(!require("survival")){
+  install.packages("survival")
+}
+if(!require("optmatch")){
+  install.packages("optmatch")
+}
 
 library(dplyr)
 library(MatchIt)
+library(lmtest)
+library(sandwich)
+library(boot)
+library(survival)
+library(optmatch)
 ```
+
+First, let's load the data and summarize it.
+```{r}
+lowdim_data <- read.csv("../data/lowDim_dataset.csv")
+highdim_data <- read.csv("../data/highDim_dataset.csv")
+
+print(dim(lowdim_data))
+print(dim(highdim_data))
+```
+
+We can see that the high-dimensional data has an order of magnitude more dimensions, and four times the data as compared to the low dimensional data. Let's view a couple rows
+
+```{r}
+head(lowdim_data)
+head(highdim_data)
+```
+
+First, we must train models to estimate the propensity scores:
+**TODO: Add all five methods
+```{r}
+# P1
+source("../lib/LR_propensity_est.R")
+lowdim_p1_time <- system.time({lowdim_model <- lr_propensity_model(lowdim_data);})
+highdim_p1_time <- system.time({highdim_model <- lr_propensity_model(highdim_data);})
+```
+
+Then, we'll estimate propensity scores, and transform them to use linear propensity distance.
+```{r}
+lowdim_p1scores_time <- system.time({lowdim_prop_scores <- lr_propensity(lowdim_data, lowdim_model);})
+highdim_p1scores_time <- system.time({highdim_prop_scores <- lr_propensity(highdim_data, highdim_model);})
+
+lowdim_prop_scores <- logit(lowdim_prop_scores)
+highdim_prop_scores <- logit(highdim_prop_scores)
+```
+
+
+Now, we'll proceed with the matching
+```{r}
+lowdim_data_match <- subset(lowdim_data, select = -c(Y))
+highdim_data_match <- subset(highdim_data, select = -c(Y))
+
+lowdim_S_time <- system.time({m.out.low <- matchit(A ~ ., data = lowdim_data_match, method = "full", distance = lowdim_prop_scores, estimand = "ATE" );})
+highdim_S_time <- system.time({m.out.high <- matchit(A ~ ., data = highdim_data_match, method = "full", distance = highdim_prop_scores, estimand = "ATE" );})
+
+m.out.low
+m.out.high
+```
+
+We obtain the matched datasets, and bind our outcome Y back to them
+```{r}
+md.low <- match.data(m.out.low)
+Y.low <- lowdim_data$Y
+md.low <- as.data.frame(cbind(Y.low, md.low))
+
+md.high <- match.data(m.out.high)
+Y.high <- highdim_data$Y
+md.high <- as.data.frame(cbind(Y.high, md.high))
+```
+
+Finally, we estimate our ATEs
+```{r}
+fit.low <- lm(Y.low ~ A, data = md.low, weights = weights)
+coeftest(fit.low, vcov. = vcovCL, cluster = ~subclass)
+
+fit.high <- lm(Y.high ~ A, data = md.high, weights = weights)
+coeftest(fit.high, vcov. = vcovCL, cluster = ~subclass)
+
+ATE.low <- summary(fit.low)$coefficients["A", "Estimate"]
+ATE.high <- summary(fit.high)$coefficients["A", "Estimate"]
+```
+We can see that both estimates have decently low p-values. Although the p-value for the low-dimensional case is above 0.05, our standard alpha-level, it is close enough that we can proceed with caution that it is significantly different from zero.
+
+
+How do our ATE estimates compare to the real ones?
+```{r}
+# Real ATEs
+lowdim_ATE_real <- 2.0901
+highdim_ATE_real <- -54.8558
+
+#SDs of outcomes, so we can normalize our difference in estimation
+sd.low <- sd(Y.low)
+sd.high <- sd(Y.high)
+
+ATE_diff.low <- (ATE.low - lowdim_ATE_real)/sd.low
+ATE_diff.high <- (ATE.high - highdim_ATE_real)/sd.high
+
+ATE_diff.low
+ATE_diff.high
+```
+
+Not bad! 
+
+Now, let's take a look at the time our algorithm took:
+```{r}
+cat("Low Dimensional Dataset:")
+cat("Time to train LR model=", lowdim_p1_time[3], "s \n")
+cat("Time to estimate propensity scores=", lowdim_p1scores_time[3], "s \n")
+cat("Time to obtain full matching over data=", lowdim_S_time[3], "s \n")
+
+cat("\n")
+
+cat("High Dimensional Dataset:")
+cat("Time to train LR model=", highdim_p1_time[3], "s \n")
+cat("Time to estimate propensity scores=", highdim_p1scores_time[3], "s \n")
+cat("Time to obtain full matching over data=", highdim_S_time[3], "s \n")
+```
+
+As we can see with quadruple the data, the full matching algorithm took about 16.781 times longer for the high-dimensional dataset, and the other components of the process were negligible in comparison. So, we can hypothesis that we have an O(n^2) time complexity. 
+
+
+References
+- https://cran.r-project.org/web/packages/MatchIt/vignettes/estimating-effects.html#after-full-matching
+
+
+
+
+
+
 
 

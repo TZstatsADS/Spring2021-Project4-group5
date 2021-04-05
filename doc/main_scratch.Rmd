@@ -1,5 +1,6 @@
 ---
 title: "ATE Estimation using Full Propensity Matching (implemented from scratch) and Linear Propensity Scoring"
+author: "Amir Idris"
 output: html_notebook
 ---
 
