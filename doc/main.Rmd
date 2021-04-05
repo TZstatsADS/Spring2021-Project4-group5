@@ -27,6 +27,9 @@ if(!require("survival")){
 if(!require("optmatch")){
   install.packages("optmatch")
 }
+if(!require("glmnet")){
+  install.packages("glmnet")
+}
 
 library(dplyr)
 library(MatchIt)
@@ -35,6 +38,7 @@ library(sandwich)
 library(boot)
 library(survival)
 library(optmatch)
+library(glmnet)
 ```
 
 First, let's load the data and summarize it.
@@ -53,22 +57,66 @@ head(lowdim_data)
 head(highdim_data)
 ```
 
-First, we must train models to estimate the propensity scores:
-**TODO: Add all five methods
+First, we must train models to estimate the propensity scores. We have five models assigned to us:
+P1: Logistic Regression
+P2: L1 Penalized Logistic Regression
+P3: L2 penalized logistic regression
+P4: Regression trees
+P5: Boosted stumps
+**ToDo: Add P4 and P5
 ```{r}
-# P1
+# Model selector method
 source("../lib/LR_propensity_est.R")
-lowdim_p1_time <- system.time({lowdim_model <- lr_propensity_model(lowdim_data);})
-highdim_p1_time <- system.time({highdim_model <- lr_propensity_model(highdim_data);})
+model_selector <- function(data, mode = 1){
+  if (mode == 1) {
+    return(lr_propensity_model(data))
+  } else if (mode == 2){
+    return(lr_propensity_model(data, mode = "lasso"))
+  } else if (mode == 3){
+    return(lr_propensity_model(data, mode = "ridge"))
+  }
+}
+```
+
+
+```{r}
+# P1-P3
+m <- 3 # number of models
+lowdim_models <- list()
+highdim_models <- list()
+lowdim_model_times <- list()
+highdim_model_times <- list()
+for(i in 1:m){
+  lowdim_model_times[[i]] <- system.time({lowdim_models[[i]] <- model_selector(lowdim_data, mode = i);})
+}
+for(i in 1:m){
+  highdim_model_times[[i]] <- system.time({highdim_models[[i]] <- model_selector(highdim_data, mode = i);})
+}
+
+#lowdim_p1_time <- system.time({lowdim_model <- lr_propensity_model(lowdim_data);})
+#highdim_p1_time <- system.time({highdim_model <- lr_propensity_model(highdim_data);})
 ```
 
 Then, we'll estimate propensity scores, and transform them to use linear propensity distance.
+**ToDO: Add method for getting prop scores for P4 and P5
 ```{r}
-lowdim_p1scores_time <- system.time({lowdim_prop_scores <- lr_propensity(lowdim_data, lowdim_model);})
-highdim_p1scores_time <- system.time({highdim_prop_scores <- lr_propensity(highdim_data, highdim_model);})
+lowdim_prop_scores <- list()
+highdim_prop_scores <- list()
+lowdim_score_times <- list()
+highdim_score_times <- list()
 
-lowdim_prop_scores <- logit(lowdim_prop_scores)
-highdim_prop_scores <- logit(highdim_prop_scores)
+for(i in 1:m){
+  lowdim_score_times[[i]] <- system.time({lowdim_prop_scores[[i]] <- logit(lr_propensity(lowdim_data, lowdim_models[[i]], mode = i));})
+}
+for(i in 1:m){
+  highdim_score_times[[i]] <- system.time({highdim_prop_scores[[i]] <- logit(lr_propensity(highdim_data, highdim_models[[i]], mode = i));})
+}
+
+#lowdim_p1scores_time <- system.time({lowdim_prop_scores <- lr_propensity(lowdim_data, lowdim_model);})
+#highdim_p1scores_time <- system.time({highdim_prop_scores <- lr_propensity(highdim_data, highdim_model);})
+
+#lowdim_prop_scores <- logit(lowdim_prop_scores)
+#highdim_prop_scores <- logit(highdim_prop_scores)
 ```
 
 
@@ -76,12 +124,24 @@ Now, we'll proceed with the matching
 ```{r}
 lowdim_data_match <- subset(lowdim_data, select = -c(Y))
 highdim_data_match <- subset(highdim_data, select = -c(Y))
+lowdim_matches <- list()
+highdim_matches <- list()
+lowdim_match_times <- list()
+highdim_match_times <- list()
 
-lowdim_S_time <- system.time({m.out.low <- matchit(A ~ ., data = lowdim_data_match, method = "full", distance = lowdim_prop_scores, estimand = "ATE" );})
-highdim_S_time <- system.time({m.out.high <- matchit(A ~ ., data = highdim_data_match, method = "full", distance = highdim_prop_scores, estimand = "ATE" );})
+for(i in 1:m){
+  lowdim_match_times[[i]] <- system.time({lowdim_matches[[i]] <- matchit(A ~ ., data = lowdim_data_match, method = "full", distance = lowdim_prop_scores[[i]], estimand = "ATE" );})
+}
+for(i in 1:m){
+  highdim_match_times[[i]] <- system.time({highdim_matches[[i]] <- matchit(A ~ ., data = highdim_data_match, method = "full", distance = highdim_prop_scores[[i]], estimand = "ATE" );})
+}
 
-m.out.low
-m.out.high
+#lowdim_S_time <- system.time({m.out.low <- matchit(A ~ ., data = lowdim_data_match, method = "full", distance = lowdim_prop_scores, estimand = "ATE" );})
+#highdim_S_time <- system.time({m.out.high <- matchit(A ~ ., data = highdim_data_match, method = "full", distance = highdim_prop_scores, estimand = "ATE" );})
+
+# Example matchings
+lowdim_matches[[1]]
+highdim_matches[[1]]
 ```
 
 We obtain the matched datasets, and bind our outcome Y back to them
