@@ -6,6 +6,10 @@
 
 
 gbm_propensity_model <- function(data){
+  if ("Y" %in% colnames(data)){
+    data <- subset(data, select = -c(Y))
+  }
+  
   model <- gbm(A~., data = data, 
                distribution = "bernoulli",
                n.trees = 60,

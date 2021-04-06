@@ -33,6 +33,10 @@ if(!require("glmnet")){
 if(!require("gbm")){
   install.packages("gbm")
 }
+if(!require("rpart")){
+  install.packages("rpart")
+}
+
 
 library(dplyr)
 library(MatchIt)
@@ -43,6 +47,7 @@ library(survival)
 library(optmatch)
 library(glmnet)
 library(gbm)
+library(rpart)
 ```
 
 First, let's load the data and summarize it.
@@ -67,11 +72,11 @@ P2: L1 Penalized Logistic Regression
 P3: L2 penalized logistic regression
 P4: Regression trees
 P5: Boosted stumps
-**ToDo: Add P4
 ```{r}
 # Model selector method
 source("../lib/LR_propensity_est.R")
 source("../lib/boosted_stumps_propensity_est.R")
+source("../lib/regression_tree_propensity_est.R")
 model_selector <- function(data, mode = 1){
   if (mode == 1) {
     return(lr_propensity_model(data))
@@ -79,6 +84,8 @@ model_selector <- function(data, mode = 1){
     return(lr_propensity_model(data, mode = "lasso"))
   } else if (mode == 3){
     return(lr_propensity_model(data, mode = "ridge"))
+  } else if (mode == 4){
+    return(regression_tree_propensity_model(data))
   } else{
     return(gbm_propensity_model(data))
   }
@@ -87,8 +94,8 @@ model_selector <- function(data, mode = 1){
 
 
 ```{r}
-# P1-P3, P5
-m <- 4 # number of models
+# P1-P5
+m <- 5 # number of models
 lowdim_models <- list()
 highdim_models <- list()
 lowdim_model_times <- list()
@@ -119,6 +126,8 @@ predict_selector <- function(features, model, mode = 1){
     return(lr_propensity(features, model, mode = mode))
   } else if (mode == 3){
     return(lr_propensity(features, model, mode = mode))
+  } else if (mode == 4){
+    return(regression_tree_propensity(features, model))
   } else{
     return(gbm_propensity(features, model))
   }
@@ -228,7 +237,7 @@ sd.high <- sd(Y.high)
 ATE_diff.low <- (lowdim_ATEs - lowdim_ATE_real)/sd.low
 ATE_diff.high <- (highdim_ATEs- highdim_ATE_real)/sd.high
 
-method_names <- c("A1 + D3 + P1", "A1 + D3 + P2", "A1 + D3 + P3", "A1 + D3 + P5")
+method_names <- c("A1 + D3 + P1", "A1 + D3 + P2", "A1 + D3 + P3", "A1 + D3 + P4", "A1 + D3 + P5")
 
 ATE_table <- as.matrix(cbind(lowdim_ATEs, ATE_diff.low, highdim_ATEs, ATE_diff.high))
 rownames(ATE_table) <- method_names
