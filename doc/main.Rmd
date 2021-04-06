@@ -80,7 +80,7 @@ source("../lib/regression_tree_propensity_est.R")
 model_selector <- function(data, mode = 1){
   if (mode == 1) {
     return(lr_propensity_model(data))
-  } else if (mode == 2){
+  } else if (mode == 2 | mode == 6){
     return(lr_propensity_model(data, mode = "lasso"))
   } else if (mode == 3){
     return(lr_propensity_model(data, mode = "ridge"))
@@ -94,8 +94,8 @@ model_selector <- function(data, mode = 1){
 
 
 ```{r}
-# P1-P5
-m <- 5 # number of models
+# P1-P5, A7 + P2 included
+m <- 6 # number of models
 lowdim_models <- list()
 highdim_models <- list()
 lowdim_model_times <- list()
@@ -122,7 +122,7 @@ highdim_score_times <- list()
 predict_selector <- function(features, model, mode = 1){
   if (mode == 1) {
     return(lr_propensity(features, model))
-  } else if (mode == 2){
+  } else if (mode == 2 | mode == 6){
     return(lr_propensity(features, model, mode = mode))
   } else if (mode == 3){
     return(lr_propensity(features, model, mode = mode))
@@ -134,10 +134,22 @@ predict_selector <- function(features, model, mode = 1){
 }
 
 for(i in 1:m){
-  lowdim_score_times[[i]] <- system.time({lowdim_prop_scores[[i]] <- logit(predict_selector(lowdim_data, lowdim_models[[i]], mode = i));})
+  lowdim_score_times[[i]] <- system.time({
+    if(i < 6){
+      lowdim_prop_scores[[i]] <- logit(predict_selector(lowdim_data, lowdim_models[[i]], mode = i))
+    }
+    else{
+      lowdim_prop_scores[[i]] <- predict_selector(lowdim_data, lowdim_models[[i]], mode = i)
+    };})
 }
 for(i in 1:m){
-  highdim_score_times[[i]] <- system.time({highdim_prop_scores[[i]] <- logit(predict_selector(highdim_data, highdim_models[[i]], mode = i));})
+  highdim_score_times[[i]] <- system.time({
+    if (i < 6){
+      highdim_prop_scores[[i]] <- logit(predict_selector(highdim_data, highdim_models[[i]], mode = i))
+    }
+    else{
+      highdim_prop_scores[[i]] <- predict_selector(highdim_data, highdim_models[[i]], mode = i)
+    };})
 }
 
 #lowdim_p1scores_time <- system.time({lowdim_prop_scores <- lr_propensity(lowdim_data, lowdim_model);})
@@ -150,6 +162,7 @@ for(i in 1:m){
 
 Now, we'll proceed with the matching
 ```{r}
+m <- 5 # We'll handle weighted regression separately
 lowdim_data_match <- subset(lowdim_data, select = -c(Y))
 highdim_data_match <- subset(highdim_data, select = -c(Y))
 lowdim_matches <- list()
@@ -212,6 +225,11 @@ for(i in 1:m){
   highdim_ATEs <- c(highdim_ATEs, summary(fit.high)$coefficients["A", "Estimate"])
 }
 
+# Weighted regression
+source("../lib/weighted_regression.R")
+lowdim_ATEs[[m+1]] <- weighted_regression(lowdim_data, lowdim_prop_scores[[m+1]])
+highdim_ATEs[[m+1]] <- weighted_regression(highdim_data, highdim_prop_scores[[m+1]])
+
 #fit.low <- lm(Y.low ~ A, data = md.low, weights = weights)
 #coeftest(fit.low, vcov. = vcovCL, cluster = ~subclass)
 
@@ -221,11 +239,11 @@ for(i in 1:m){
 #ATE.low <- summary(fit.low)$coefficients["A", "Estimate"]
 #ATE.high <- summary(fit.high)$coefficients["A", "Estimate"]
 ```
-We can see that both estimates have decently low p-values. Although the p-value for the low-dimensional case is above 0.05, our standard alpha-level, it is close enough that we can proceed with caution that it is significantly different from zero.
 
 
 How do our ATE estimates compare to the real ones?
 ```{r}
+m <- 6
 # Real ATEs
 lowdim_ATE_real <- 2.0901
 highdim_ATE_real <- -54.8558
@@ -237,7 +255,7 @@ sd.high <- sd(Y.high)
 ATE_diff.low <- (lowdim_ATEs - lowdim_ATE_real)/sd.low
 ATE_diff.high <- (highdim_ATEs- highdim_ATE_real)/sd.high
 
-method_names <- c("A1 + D3 + P1", "A1 + D3 + P2", "A1 + D3 + P3", "A1 + D3 + P4", "A1 + D3 + P5")
+method_names <- c("A1 + D3 + P1", "A1 + D3 + P2", "A1 + D3 + P3", "A1 + D3 + P4", "A1 + D3 + P5", "A7 + P2")
 
 ATE_table <- as.matrix(cbind(lowdim_ATEs, ATE_diff.low, highdim_ATEs, ATE_diff.high))
 rownames(ATE_table) <- method_names
@@ -266,8 +284,10 @@ for(i in 1:m){
 }
 
 time_table <- as.matrix(cbind(lowdim_model_time, highdim_model_time, lowdim_score_time, highdim_score_time, lowdim_match_time, highdim_match_time))
+total <- rowSums(time_table)
+time_table <- as.matrix(cbind(time_table, total))
 rownames(time_table) <- method_names
-colnames(time_table) <- c("Low-Dim Model Train Time", "High-Dim Model Train Time", "Low-Dim Scoring Time", "High-Dim Scoring Time", "Low-Dim Matching Time", "High-Dim Matching Time")
+colnames(time_table) <- c("Low-Dim Model Train Time", "High-Dim Model Train Time", "Low-Dim Scoring Time", "High-Dim Scoring Time", "Low-Dim Matching Time", "High-Dim Matching Time", "Total")
 
 time_table
 
