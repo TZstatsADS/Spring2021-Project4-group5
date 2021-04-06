@@ -227,8 +227,8 @@ for(i in 1:m){
 
 # Weighted regression
 source("../lib/weighted_regression.R")
-lowdim_ATEs[[m+1]] <- weighted_regression(lowdim_data, lowdim_prop_scores[[m+1]])
-highdim_ATEs[[m+1]] <- weighted_regression(highdim_data, highdim_prop_scores[[m+1]])
+lowdim_match_times[[m+1]] <- system.time({lowdim_ATEs[[m+1]] <- weighted_regression(lowdim_data, lowdim_prop_scores[[m+1]]);})
+highdim_match_times[[m+1]] <- system.time({highdim_ATEs[[m+1]] <- weighted_regression(highdim_data, highdim_prop_scores[[m+1]]);})
 
 #fit.low <- lm(Y.low ~ A, data = md.low, weights = weights)
 #coeftest(fit.low, vcov. = vcovCL, cluster = ~subclass)
