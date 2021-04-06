@@ -1,0 +1,319 @@
+---
+title: "ATE Estimation using Full Propensity Matching (implemented from scratch) and Linear Propensity Scoring"
+author: "Amir Idris"
+output: html_notebook
+---
+
+
+```{r}
+if(!require("dplyr")){
+  install.packages("dplyr")
+}
+if(!require("MatchIt")){
+  install.packages("MatchIt")
+}
+if(!require("lmtest")){
+  install.packages("lmtest")
+}
+if(!require("sandwich")){
+  install.packages("sandwich")
+}
+if(!require("boot")){
+  install.packages("boot")
+}
+if(!require("survival")){
+  install.packages("survival")
+}
+if(!require("optmatch")){
+  install.packages("optmatch")
+}
+if(!require("glmnet")){
+  install.packages("glmnet")
+}
+if(!require("gbm")){
+  install.packages("gbm")
+}
+if(!require("rpart")){
+  install.packages("rpart")
+}
+
+
+library(dplyr)
+library(MatchIt)
+library(lmtest)
+library(sandwich)
+library(boot)
+library(survival)
+library(optmatch)
+library(glmnet)
+library(gbm)
+library(rpart)
+```
+
+First, let's load the data and summarize it.
+```{r}
+lowdim_data <- read.csv("../data/lowDim_dataset.csv")
+highdim_data <- read.csv("../data/highDim_dataset.csv")
+
+print(dim(lowdim_data))
+print(dim(highdim_data))
+```
+
+We can see that the high-dimensional data has an order of magnitude more dimensions, and four times the data as compared to the low dimensional data. Let's view a couple rows
+
+```{r}
+head(lowdim_data)
+head(highdim_data)
+```
+
+First, we must train models to estimate the propensity scores. We have five models assigned to us:
+P1: Logistic Regression
+P2: L1 Penalized Logistic Regression
+P3: L2 penalized logistic regression
+P4: Regression trees
+P5: Boosted stumps
+```{r}
+# Model selector method
+source("../lib/LR_propensity_est.R")
+source("../lib/boosted_stumps_propensity_est.R")
+source("../lib/regression_tree_propensity_est.R")
+model_selector <- function(data, mode = 1){
+  if (mode == 1) {
+    return(lr_propensity_model(data))
+  } else if (mode == 2 | mode == 6){
+    return(lr_propensity_model(data, mode = "lasso"))
+  } else if (mode == 3){
+    return(lr_propensity_model(data, mode = "ridge"))
+  } else if (mode == 4){
+    return(regression_tree_propensity_model(data))
+  } else{
+    return(gbm_propensity_model(data))
+  }
+}
+```
+
+
+```{r}
+# P1-P5, A7 + P2 included
+m <- 6 # number of models
+lowdim_models <- list()
+highdim_models <- list()
+lowdim_model_times <- list()
+highdim_model_times <- list()
+for(i in 1:m){
+  lowdim_model_times[[i]] <- system.time({lowdim_models[[i]] <- model_selector(lowdim_data, mode = i);})
+}
+for(i in 1:m){
+  highdim_model_times[[i]] <- system.time({highdim_models[[i]] <- model_selector(highdim_data, mode = i);})
+}
+
+#lowdim_p1_time <- system.time({lowdim_model <- lr_propensity_model(lowdim_data);})
+#highdim_p1_time <- system.time({highdim_model <- lr_propensity_model(highdim_data);})
+```
+
+Then, we'll estimate propensity scores, and transform them to use linear propensity distance.
+**ToDO: Add method for getting prop scores for P4
+```{r}
+lowdim_prop_scores <- list()
+highdim_prop_scores <- list()
+lowdim_score_times <- list()
+highdim_score_times <- list()
+
+predict_selector <- function(features, model, mode = 1){
+  if (mode == 1) {
+    return(lr_propensity(features, model))
+  } else if (mode == 2 | mode == 6){
+    return(lr_propensity(features, model, mode = mode))
+  } else if (mode == 3){
+    return(lr_propensity(features, model, mode = mode))
+  } else if (mode == 4){
+    return(regression_tree_propensity(features, model))
+  } else{
+    return(gbm_propensity(features, model))
+  }
+}
+
+for(i in 1:m){
+  lowdim_score_times[[i]] <- system.time({
+    if(i < 6){
+      lowdim_prop_scores[[i]] <- logit(predict_selector(lowdim_data, lowdim_models[[i]], mode = i))
+    }
+    else{
+      lowdim_prop_scores[[i]] <- predict_selector(lowdim_data, lowdim_models[[i]], mode = i)
+    };})
+}
+for(i in 1:m){
+  highdim_score_times[[i]] <- system.time({
+    if (i < 6){
+      highdim_prop_scores[[i]] <- logit(predict_selector(highdim_data, highdim_models[[i]], mode = i))
+    }
+    else{
+      highdim_prop_scores[[i]] <- predict_selector(highdim_data, highdim_models[[i]], mode = i)
+    };})
+}
+
+#lowdim_p1scores_time <- system.time({lowdim_prop_scores <- lr_propensity(lowdim_data, lowdim_model);})
+#highdim_p1scores_time <- system.time({highdim_prop_scores <- lr_propensity(highdim_data, highdim_model);})
+
+#lowdim_prop_scores <- logit(lowdim_prop_scores)
+#highdim_prop_scores <- logit(highdim_prop_scores)
+```
+
+
+Now, we'll proceed with the matching
+```{r}
+m <- 5 # We'll handle weighted regression separately
+lowdim_data_match <- subset(lowdim_data, select = -c(Y))
+highdim_data_match <- subset(highdim_data, select = -c(Y))
+lowdim_matches <- list()
+highdim_matches <- list()
+lowdim_match_times <- list()
+highdim_match_times <- list()
+
+for(i in 1:m){
+  lowdim_match_times[[i]] <- system.time({lowdim_matches[[i]] <- matchit(A ~ ., data = lowdim_data_match, method = "full", distance = lowdim_prop_scores[[i]], estimand = "ATE" );})
+}
+for(i in 1:m){
+  highdim_match_times[[i]] <- system.time({highdim_matches[[i]] <- matchit(A ~ ., data = highdim_data_match, method = "full", distance = highdim_prop_scores[[i]], estimand = "ATE" );})
+}
+
+#lowdim_S_time <- system.time({m.out.low <- matchit(A ~ ., data = lowdim_data_match, method = "full", distance = lowdim_prop_scores, estimand = "ATE" );})
+#highdim_S_time <- system.time({m.out.high <- matchit(A ~ ., data = highdim_data_match, method = "full", distance = highdim_prop_scores, estimand = "ATE" );})
+
+# Example matchings
+lowdim_matches[[1]]
+highdim_matches[[1]]
+```
+
+We obtain the matched datasets, and bind our outcome Y back to them
+```{r}
+lowdim_match_sets <- list()
+highdim_match_sets <- list()
+for(i in 1:m){
+  lowdim_match_sets[[i]] <- match.data(lowdim_matches[[i]])
+  Y.low <- lowdim_data$Y
+  lowdim_match_sets[[i]] <- as.data.frame(cbind(Y.low, lowdim_match_sets[[i]]))
+}
+for(i in 1:m){
+  highdim_match_sets[[i]] <- match.data(highdim_matches[[i]])
+  Y.high <- highdim_data$Y
+  highdim_match_sets[[i]] <- as.data.frame(cbind(Y.high, highdim_match_sets[[i]]))
+}
+
+#md.low <- match.data(m.out.low)
+#Y.low <- lowdim_data$Y
+#md.low <- as.data.frame(cbind(Y.low, md.low))
+
+#md.high <- match.data(m.out.high)
+#Y.high <- highdim_data$Y
+#md.high <- as.data.frame(cbind(Y.high, md.high))
+```
+
+Finally, we estimate our ATEs
+```{r}
+lowdim_ATEs <- c()
+highdim_ATEs <- c()
+
+for(i in 1:m){
+  fit.low <- lm(Y.low ~ A, data = lowdim_match_sets[[i]], weights = weights)
+  coeftest(fit.low, vcov. = vcovCL, cluster = ~subclass)
+  lowdim_ATEs <- c(lowdim_ATEs, summary(fit.low)$coefficients["A", "Estimate"])
+}
+for(i in 1:m){
+  fit.high <- lm(Y.high ~ A, data = highdim_match_sets[[i]], weights = weights)
+  coeftest(fit.high, vcov. = vcovCL, cluster = ~subclass)
+  highdim_ATEs <- c(highdim_ATEs, summary(fit.high)$coefficients["A", "Estimate"])
+}
+
+# Weighted regression
+source("../lib/weighted_regression.R")
+lowdim_match_times[[m+1]] <- system.time({lowdim_ATEs[[m+1]] <- weighted_regression(lowdim_data, lowdim_prop_scores[[m+1]]);})
+highdim_match_times[[m+1]] <- system.time({highdim_ATEs[[m+1]] <- weighted_regression(highdim_data, highdim_prop_scores[[m+1]]);})
+
+#fit.low <- lm(Y.low ~ A, data = md.low, weights = weights)
+#coeftest(fit.low, vcov. = vcovCL, cluster = ~subclass)
+
+#fit.high <- lm(Y.high ~ A, data = md.high, weights = weights)
+#coeftest(fit.high, vcov. = vcovCL, cluster = ~subclass)
+
+#ATE.low <- summary(fit.low)$coefficients["A", "Estimate"]
+#ATE.high <- summary(fit.high)$coefficients["A", "Estimate"]
+```
+
+
+How do our ATE estimates compare to the real ones?
+```{r}
+m <- 6
+# Real ATEs
+lowdim_ATE_real <- 2.0901
+highdim_ATE_real <- -54.8558
+
+#SDs of outcomes, so we can normalize our difference in estimation
+sd.low <- sd(Y.low)
+sd.high <- sd(Y.high)
+
+ATE_diff.low <- (lowdim_ATEs - lowdim_ATE_real)/sd.low
+ATE_diff.high <- (highdim_ATEs- highdim_ATE_real)/sd.high
+
+method_names <- c("A1 + D3 + P1", "A1 + D3 + P2", "A1 + D3 + P3", "A1 + D3 + P4", "A1 + D3 + P5", "A7 + P2")
+
+ATE_table <- as.matrix(cbind(lowdim_ATEs, ATE_diff.low, highdim_ATEs, ATE_diff.high))
+rownames(ATE_table) <- method_names
+colnames(ATE_table) <- c("Low-Dim ATE Estimate", "Low-Dim Error in SDs", "High-Dim ATE Estimate", "High-Dim Error in SDs")
+ATE_table
+```
+
+Not bad! 
+
+Now, let's take a look at the time our algorithm took:
+```{r}
+lowdim_model_time <- c()
+highdim_model_time <- c()
+lowdim_score_time <- c()
+highdim_score_time <- c()
+lowdim_match_time <- c()
+highdim_match_time <- c()
+
+for(i in 1:m){
+  lowdim_model_time <- c(lowdim_model_time, lowdim_model_times[[i]][3])
+  highdim_model_time <- c(highdim_model_time, highdim_model_times[[i]][3])
+  lowdim_score_time <- c(lowdim_score_time, lowdim_score_times[[i]][3])
+  highdim_score_time <- c(highdim_score_time, highdim_score_times[[i]][3])
+  lowdim_match_time <- c(lowdim_match_time, lowdim_match_times[[i]][3])
+  highdim_match_time <- c(highdim_match_time, highdim_match_times[[i]][3])
+}
+
+time_table <- as.matrix(cbind(lowdim_model_time, highdim_model_time, lowdim_score_time, highdim_score_time, lowdim_match_time, highdim_match_time))
+total <- rowSums(time_table)
+time_table <- as.matrix(cbind(time_table, total))
+rownames(time_table) <- method_names
+colnames(time_table) <- c("Low-Dim Model Train Time", "High-Dim Model Train Time", "Low-Dim Scoring Time", "High-Dim Scoring Time", "Low-Dim Matching Time", "High-Dim Matching Time", "Total")
+
+time_table
+
+# cat("Low Dimensional Dataset:")
+# cat("Time to train LR model=", lowdim_p1_time[3], "s \n")
+# cat("Time to estimate propensity scores=", lowdim_p1scores_time[3], "s \n")
+# cat("Time to obtain full matching over data=", lowdim_S_time[3], "s \n")
+# 
+# cat("\n")
+# 
+# cat("High Dimensional Dataset:")
+# cat("Time to train LR model=", highdim_p1_time[3], "s \n")
+# cat("Time to estimate propensity scores=", highdim_p1scores_time[3], "s \n")
+# cat("Time to obtain full matching over data=", highdim_S_time[3], "s \n")
+```
+
+As we can see with quadruple the data, the full matching algorithm took about 16.781 times longer for the high-dimensional dataset, and the other components of the process were negligible in comparison. So, we can hypothesis that we have an O(n^2) time complexity. 
+
+
+References
+- https://cran.r-project.org/web/packages/MatchIt/vignettes/estimating-effects.html#after-full-matching
+
+
+
+
+
+
+
+
