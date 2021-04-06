@@ -19,6 +19,19 @@ lr_propensity_model <- function(data, mode="logit"){
     model <- glmnet(y = A, x = data[[ , names(dd) != "A"]], family = "binomial", alpha = 0)
   }
   
+<<<<<<< Updated upstream
+=======
+  else if(mode == "tree"){
+    model <- rpart(A~., data = data, method = "class")
+    min_cp = model$cptable[which.min(model$cptable[,"xerror"]),"CP"]
+    model = prune(model, cp=min_cp)
+  }
+  else if(mode == "stump"){
+    n.trees = nrow(data)/5 #gets roughly # of trees Chuyun's x-val found best
+    model <- gbm(as.character(A) ~ ., data=data, distribution="bernoulli", n.trees = n.trees)   
+  }
+
+>>>>>>> Stashed changes
   return(model)
 }
 
@@ -28,7 +41,24 @@ lr_propensity <- function(features, model){
     features <- subset(features, select = -c(Y))
   }
   if("A" %in% colnames(features)){
+<<<<<<< Updated upstream
     features <- subset(features, select = -c(Y))
+=======
+    features <- subset(features, select = -c(A))
+  }
+  if (mode == 1){
+    props <- predict(model, newx = data.matrix(features), type = "response")
+  } 
+  else if (mode ==4){
+    props <- predict(model, newx = data.matrix(features), type = "prob")[,2]
+  }
+  else if (mode ==5){
+    props <- predict(model, newx = data.matrix(features), n.trees = 500)
+  }
+  else{
+    props <- predict(model, newx = data.matrix(features), type = "response", s=0.01)
+    props <- props[, 1]
+>>>>>>> Stashed changes
   }
   
   props <- predict(model, newx = features, type = "response")
