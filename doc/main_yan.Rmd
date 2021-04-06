@@ -47,7 +47,7 @@ treated = ps.dt %>% filter(treatOrNot == 2)
 (treated_score = unique(treated$propensityScore))
 notTreated = ps.dt %>% filter(treatOrNot == 1)
 (notTreated_score = unique(notTreated$propensityScore))
-discarded = as.matrix(ps.dt[1,])
+#discarded = as.matrix(ps.dt[1,])
 matched_t = as.matrix(ps.dt[1,])
 matched_nt = as.matrix(ps.dt[1,])
 matched_score = treated_score[sort(treated_score) == sort(notTreated_score)]
@@ -66,6 +66,7 @@ Y.1 = data.l[matched_t$index,]$Y
 Y.0 = data.l[matched_nt$index,]$Y
 ATE_tm.l = system.time(ATE.l <- mean(Y.1) - mean(Y.0))
 list(model_tm.l[1], ps_tm.l[1], matching_tm.l[1], ATE_tm.l[1])
+ATE.l
 ```
 # paring 8 on highDim data
 ```{r}
@@ -104,6 +105,7 @@ Y.1 = data.h[matched_t$index,]$Y
 Y.0 = data.h[matched_nt$index,]$Y
 ATE_tm.h = system.time(ATE.h <- mean(Y.1) - mean(Y.0))
 list(model_tm.h[1], ps_tm.h[1], matching_tm.h[1], ATE_tm.h[1])
+ATE.h
 ```
 
 
@@ -121,10 +123,12 @@ w = (as.numeric(ps.dt$treatedOrNot)-1)/ps.dt$ps + (2-as.numeric(ps.dt$treatedOrN
 var.indicator = summary(lm(Y~., data=data.l))$coefficients[,4]<.05
 
 z = model.matrix(A~.,data.l[,-1])[,var.indicator[-2]][,-1]
-zMinusZBar = (z - rowMeans(z))*(as.numeric(y)-1)
+zMinusZBar = matrix(nrow = dim(z)[1],ncol = dim(z)[2])
+for (i in 1:dim(z)[2]) {
+  zMinusZBar[,i] = (z[,i] - colMeans(z)[i])*(as.numeric(y)[i]-1)
+}
 colnames(zMinusZBar) = sapply(colnames(zMinusZBar), function(x) paste(x,paste(x,"_bar",sep=""),sep="-"))
-(ATE.l = lm(Y~.,data = cbind(data.l[,1:2], z, zMinusZBar), weights = w)) # with zMinusZBar
-lm(Y~.,data = cbind(data.l[,1:2], z), weights = w) # without zMinusZBar
+(ATE.l = lm(Y~.,data = cbind(data.l[,1:2], z, zMinusZBar), weights = w)$coefficients[2])
 ```
 
 # paring 24 on highDim data
@@ -145,8 +149,10 @@ w = (as.numeric(ps.dt$treatedOrNot)-1)/ps.dt$ps + (2-as.numeric(ps.dt$treatedOrN
 var.indicator = summary(lm(Y~., data=data.h))$coefficients[,4]<.05
 
 z = model.matrix(A~.,data.h[,-1])[,var.indicator[-2]][,-1]
-zMinusZBar = (z - rowMeans(z))*(as.numeric(y)-1)
+zMinusZBar = matrix(nrow = dim(z)[1],ncol = dim(z)[2])
+for (i in 1:dim(z)[2]) {
+  zMinusZBar[,i] = (z[,i] - colMeans(z)[i])*(as.numeric(y)[i]-1)
+}
 colnames(zMinusZBar) = sapply(colnames(zMinusZBar), function(x) paste(x,paste(x,"_bar",sep=""),sep="-"))
-(ATE.h = lm(Y~.,data = cbind(data.h[,1:2], z, zMinusZBar), weights = w)) # with zMinusZBar
-lm(Y~.,data = cbind(data.h[,1:2], z), weights = w) # without zMinusZBar
+(ATE.l = lm(Y~.,data = cbind(data.h[,1:2], z, zMinusZBar), weights = w)$coefficients[2])
 ```
