@@ -107,7 +107,6 @@ highdim_models <- list()
 lowdim_model_times <- list()
 highdim_model_times <- list()
 for(i in 1:m){
-  print(i)
   lowdim_model_times[[i]] <- system.time({lowdim_models[[i]] <- model_selector(lowdim_data, mode = i);})
 }
 for(i in 1:m){
@@ -115,7 +114,7 @@ for(i in 1:m){
 }
 #lowdim_p1_time <- system.time({lowdim_model <- lr_propensity_model(lowdim_data);})
 #highdim_p1_time <- system.time({highdim_model <- lr_propensity_model(highdim_data);})
-```
+```   
 
 Then, we'll estimate propensity scores, and transform them to use linear propensity distance.
 **ToDO: Add method for getting prop scores for P4 and P5
