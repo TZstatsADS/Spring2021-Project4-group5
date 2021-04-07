@@ -19,7 +19,7 @@ Term: Spring 2021
 + <ins>Yandong Xiong</ins>: Research and implement regression tree propensity model. Research and co-implement weighted regression algorithm. 
 + <ins>Ruize Yu</ins>: Research and implement boosted stumps propensity model. Research and co-implement weighted regression algorithm.
 + <ins>Sean Harris</ins>: Research and implement L1 and L2 penalized logistic regression propensity models. Research full matching package _MatchIt_. 
-+ <ins>Chuyun Shu</ins>: Research and implement boosted stumps propensity model.
++ <ins>Chuyun Shu</ins>: Research and implement boosted stumps propensity model.Research and help co-implement L1 Penalized Logistic Regression propensity model.
 
 Following [suggestions](http://nicercode.github.io/blog/2013-04-05-projects/) by [RICH FITZJOHN](http://nicercode.github.io/about/#Team) (@richfitz). This folder is orgarnized as follows.
 
