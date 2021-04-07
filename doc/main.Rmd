@@ -1,7 +1,10 @@
 ---
-title: "ATE Estimation using Full Propensity Matching (implemented from scratch) and Linear Propensity Scoring"
+title: ATE Estimation using Full Propensity Matching (implemented from scratch) and
+  Linear Propensity Scoring
 author: "Amir Idris"
-output: html_notebook
+output:
+  pdf_document: default
+  html_notebook: default
 ---
 
 
@@ -50,7 +53,7 @@ library(gbm)
 library(rpart)
 ```
 
-First, let's load the data and summarize it.
+<h3> First, let's load the data and summarize it. </h3>
 ```{r}
 lowdim_data <- read.csv("../data/lowDim_dataset.csv")
 highdim_data <- read.csv("../data/highDim_dataset.csv")
@@ -66,11 +69,11 @@ head(lowdim_data)
 head(highdim_data)
 ```
 
-First, we must train models to estimate the propensity scores. We have five models assigned to us:
-P1: Logistic Regression
-P2: L1 Penalized Logistic Regression
-P3: L2 penalized logistic regression
-P4: Regression trees
+<h3>First, we must train models to estimate the propensity scores. We have five models assigned to us:</h3>  
+P1: Logistic Regression  
+P2: L1 Penalized Logistic Regression  
+P3: L2 penalized logistic regression  
+P4: Regression trees  
 P5: Boosted stumps
 ```{r}
 # Model selector method
@@ -108,9 +111,9 @@ for(i in 1:m){
 }
 ```
 
-Then, we'll estimate propensity scores, and transform them to use linear propensity distance.
+<h3>Then, we'll estimate propensity scores, and transform them to use linear propensity distance.</h3>
 
-**It's worth noting that we can't have propensity scores that are exactly 0 or exactly 1, since that will give us Inf for our logit transformation. So, the entries from the regression tree that match this criteria are added/subtracted a small dx so that they don't go to infinity.
+**It's worth noting that we can't have propensity scores that are exactly 0 or exactly 1, since that will give us infinity for our logit transformation. So, the entries from the regression tree that match this criteria are added/subtracted a small dx so that they don't go to infinity.
 ```{r}
 lowdim_prop_scores <- list()
 highdim_prop_scores <- list()
@@ -152,7 +155,8 @@ for(i in 1:m){
 ```
 
 
-Now, we'll proceed with the full matching, using the MatchIt package. This part is the most time intensive, since it must find the optimal matching such that total discrepancy between matched comparisons is minimized, so it can't take a greedy approach. (Hansen, 2004) 
+<h3>Now, we'll proceed with the full matching, using the _MatchIt_ package. </h3>
+This part is the most time intensive, since it must find the optimal matching such that total discrepancy between matched comparisons is minimized, so it can't take a greedy approach. _(Hansen, 2004)_
 ```{r}
 m <- 5 # We'll handle weighted regression separately
 lowdim_data_match <- subset(lowdim_data, select = -c(Y))
@@ -174,7 +178,7 @@ lowdim_matches[[1]]
 highdim_matches[[1]]
 ```
 
-We obtain datasets of the matches, and bind our outcome Y back to them
+<h3>We obtain datasets of the matches, and bind our outcome Y back to them.</h3>
 ```{r}
 lowdim_match_sets <- list()
 highdim_match_sets <- list()
@@ -190,7 +194,7 @@ for(i in 1:m){
 }
 ```
 
-Finally, we estimate our ATEs. 
+<h3>Finally, we estimate our ATEs. </h3>
 ```{r}
 lowdim_ATEs <- c()
 highdim_ATEs <- c()
@@ -213,7 +217,7 @@ highdim_match_times[[m+1]] <- system.time({highdim_ATEs[[m+1]] <- weighted_regre
 ```
 
 
-How do our ATE estimates compare to the real ones?
+<h3>How do our ATE estimates compare to the real ones?</h3>
 ```{r}
 m <- 6
 # Real ATEs
@@ -235,9 +239,9 @@ colnames(ATE_table) <- c("Low-Dim ATE Estimate", "Low-Dim Error in SDs", "High-D
 ATE_table
 ```
 
-Not bad! Our worst estimate is less than 0.2 standard deviations away from the true ATE.
+<h3>Not bad! Our worst estimate is less than 0.2 standard deviations away from the true ATE.
 
-Now, let's take a look at the time our algorithm took:
+Now, let's take a look at the time our algorithm took:</h3>
 ```{r}
 lowdim_model_time <- c()
 highdim_model_time <- c()
@@ -262,18 +266,6 @@ rownames(time_table) <- method_names
 colnames(time_table) <- c("Low-Dim Model Train Time", "High-Dim Model Train Time", "Low-Dim Scoring Time", "High-Dim Scoring Time", "Low-Dim Matching Time", "High-Dim Matching Time", "Total")
 
 time_table
-
-# cat("Low Dimensional Dataset:")
-# cat("Time to train LR model=", lowdim_p1_time[3], "s \n")
-# cat("Time to estimate propensity scores=", lowdim_p1scores_time[3], "s \n")
-# cat("Time to obtain full matching over data=", lowdim_S_time[3], "s \n")
-# 
-# cat("\n")
-# 
-# cat("High Dimensional Dataset:")
-# cat("Time to train LR model=", highdim_p1_time[3], "s \n")
-# cat("Time to estimate propensity scores=", highdim_p1scores_time[3], "s \n")
-# cat("Time to obtain full matching over data=", highdim_S_time[3], "s \n")
 ```
 
 As we can see with quadruple the data, the full matching algorithm took about 16.781 times longer for the high-dimensional dataset, and the other components of the process were negligible in comparison. So, we can hypothesis that we have an O(n^2) time complexity. 
@@ -281,8 +273,8 @@ As we can see with quadruple the data, the full matching algorithm took about 16
 Weighted Regression seems to be the overall champion, with a low runtime compared to full-matching, and very good estimates, with an almost exact estimate on the low-dimensional dataset.
 
 
-References
-- https://cran.r-project.org/web/packages/MatchIt/vignettes/estimating-effects.html#after-full-matching
+References:  
+- https://cran.r-project.org/web/packages/MatchIt/vignettes/estimating-effects.html#after-full-matching  
 - Hansen BB. Full matching in an observational study of coaching for the SAT. Journal of the American Statistical Association. 2004;99(467):609–618.
 
 
